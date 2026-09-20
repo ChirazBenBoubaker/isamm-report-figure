@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chaos Resilience Agent — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #ffffff;
+  --surface: #f9f9f9;
+  --surface2: #f2f2f2;
+  --border: rgba(0,0,0,0.08);
+  --border2: rgba(0,0,0,0.15);
+  --text: #1a202c;
+  --muted: #718096;
+  --done: #1D9E75;
+  --done-bg: rgba(29,158,117,0.08);
+  --done-bd: rgba(29,158,117,0.25);
+  --wip: #EF9F27;
+  --wip-bg: rgba(239,159,39,0.08);
+  --wip-bd: rgba(239,159,39,0.25);
+  --todo: #7F77DD;
+  --todo-bg: rgba(127,119,221,0.08);
+  --todo-bd: rgba(127,119,221,0.25);
+  --out: #a0aec0;
+  --out-bg: rgba(0,0,0,0.03);
+  --out-bd: rgba(0,0,0,0.08);
+  --danger: #E24B4A;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  --sans: 'Syne', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 36px; }
+
+/* ── HEADER ── */
+header { padding: 64px 0 52px; border-bottom: 1px solid var(--border); margin-bottom: 60px; }
+.hdr-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  color: var(--todo); background: var(--todo-bg); border: 1px solid var(--todo-bd);
+  padding: 4px 12px; border-radius: 3px; margin-bottom: 22px;
+}
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--done); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+h1 { font-size: clamp(34px, 4.5vw, 60px); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; margin-bottom: 18px; }
+h1 em { color: var(--todo); font-style: normal; }
+.subtitle { font-size: 15px; color: var(--muted); max-width: 520px; line-height: 1.75; font-weight: 400; }
+
+/* SCOPE COUNTER */
+.scope-stats {
+  display: flex; flex-direction: column; gap: 8px; min-width: 200px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 22px; margin-top: 4px; flex-shrink: 0;
+}
+.scope-stat { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.scope-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; }
+.scope-val { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+.sv-done { color: var(--done); }
+.sv-wip  { color: var(--wip); }
+.sv-todo { color: var(--todo); }
+.sv-out  { color: var(--muted); }
+
+/* ── SECTION TITLE ── */
+.section-title {
+  font-size: 10px; font-family: var(--mono); letter-spacing: 0.14em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── PHASES ── */
+.phases {
+  display: grid; grid-template-columns: 1fr 1px 1fr 1px 1fr;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; margin-bottom: 56px;
+}
+.phase { padding: 26px 26px 22px; }
+.phase-divider { background: var(--border); }
+.phase-n { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 8px; }
+.phase-t { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.phase-d { font-size: 12px; color: var(--muted); line-height: 1.6; font-weight: 400; }
+.phase-s {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em;
+  padding: 3px 9px; border-radius: 3px; margin-top: 12px; border: 1px solid;
+}
+.ps-done { color: var(--done); background: var(--done-bg); border-color: var(--done-bd); }
+.ps-wip  { color: var(--wip);  background: var(--wip-bg);  border-color: var(--wip-bd); }
+.ps-next { color: var(--muted); background: var(--out-bg); border-color: var(--border); }
+
+/* ── STACK CHIPS ── */
+.stack-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 52px; }
+.stack-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.chip-lbl { font-size: 10px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.05em; }
+.chip-val { font-size: 14px; font-weight: 700; }
+.chip-tag {
+  font-size: 10px; font-family: var(--mono); color: var(--done);
+  background: var(--done-bg); border: 1px solid var(--done-bd);
+  padding: 2px 6px; border-radius: 3px; width: fit-content; margin-top: 2px;
+}
+.chip-tag.wip { color: var(--wip); background: var(--wip-bg); border-color: var(--wip-bd); }
+
+/* ── AGENT FLOW ── */
+.agent-flow {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 22px; margin-bottom: 52px; overflow-x: auto;
+}
+.flow-row { display: flex; align-items: center; min-width: 580px; }
+.flow-step {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 13px 14px; text-align: center;
+}
+.flow-n { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.08em; }
+.flow-l { font-size: 11px; font-weight: 700; line-height: 1.4; }
+.flow-s { font-size: 9px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+.flow-arrow { width: 28px; flex-shrink: 0; text-align: center; color: var(--border2); font-size: 16px; }
+
+/* ── PROGRESS ── */
+.progress-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 24px 28px; margin-bottom: 52px;
+}
+.prog-row { margin-bottom: 18px; }
+.prog-hdr { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.prog-lbl { font-size: 13px; font-weight: 600; }
+.prog-pct { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.bar-track { height: 5px; background: rgba(0,0,0,0.05); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+.bf-done  { background: var(--done); }
+.bf-wip   { background: var(--wip); }
+.bf-todo  { background: var(--todo); }
+
+/* ── SCOPE BOX ── */
+.scope-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 28px; margin-bottom: 52px;
+  display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0;
+}
+.scope-col { padding: 0 28px; }
+.scope-col:first-child { padding-left: 0; }
+.scope-col:last-child  { padding-right: 0; }
+.scope-divider { background: var(--border); }
+.scope-col-title {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+.scope-col-title.in  { color: var(--done); }
+.scope-col-title.out { color: var(--muted); }
+.scope-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; font-size: 12px; line-height: 1.5; }
+.scope-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.dot-in  { background: var(--done); }
+.dot-out { background: var(--out); }
+.scope-item .why { color: var(--muted); font-family: var(--mono); font-size: 10px; margin-top: 2px; }
+
+/* ── FILTER ── */
+.filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-btn {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  padding: 5px 14px; border-radius: 4px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s;
+}
+.filter-btn:hover { border-color: var(--border2); color: var(--text); }
+.filter-btn.active { border-color: var(--todo-bd); color: var(--todo); background: var(--todo-bg); }
+.filter-btn.fa-done.active { border-color: var(--done-bd); color: var(--done); background: var(--done-bg); }
+.filter-btn.fa-wip.active  { border-color: var(--wip-bd);  color: var(--wip);  background: var(--wip-bg); }
+.filter-btn.fa-out.active  { border-color: var(--border2); color: var(--muted); background: rgba(0,0,0,0.03); }
+.filter-btn.fa-krkn.active { border-color: #B5D4F4; color: #185FA5; background: #E6F1FB; }
+.filter-btn.fa-k6.active   { border-color: #97C459; color: #3B6D11; background: #EAF3DE; }
+.filter-btn.fa-opik.active { border-color: #AFA9EC; color: #534AB7; background: #EEEDFE; }
+
+/* ── CARDS GRID ── */
+.phase-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.phase-section-title {
+  font-size: 12px; font-family: var(--mono); letter-spacing: 0.1em; color: var(--text);
+  text-transform: uppercase; margin-bottom: 4px; padding: 8px 12px;
+  background: var(--surface); border-left: 3px solid var(--todo);
+  border-radius: 4px; font-weight: 600;
+}
+
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+
+.sc-card {
+  background: var(--surface); border-radius: 8px; padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  transition: border-color 0.18s, transform 0.14s, box-shadow 0.18s;
+  cursor: pointer; position: relative;
+}
+.sc-card:hover { border-color: var(--border2); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.sc-card.c-done { border-left-color: var(--done); }
+.sc-card.c-wip  { border-left-color: var(--wip); }
+.sc-card.c-todo { border-left-color: var(--todo); }
+.sc-card.c-out  { border-left-color: var(--out); opacity: 0.65; }
+.sc-card.active { 
+  border: 2px solid var(--todo); 
+  border-left: 3px solid var(--todo);
+  box-shadow: 0 2px 12px rgba(127,119,221,0.2); 
+}
+
+.sc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sc-num { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; }
+
+.pill {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em;
+  padding: 2px 8px; border-radius: 3px; border: 1px solid;
+}
+.p-done { color: var(--done); border-color: var(--done-bd); background: var(--done-bg); }
+.p-wip  { color: var(--wip);  border-color: var(--wip-bd);  background: var(--wip-bg); }
+.p-todo { color: var(--todo); border-color: var(--todo-bd); background: var(--todo-bg); }
+.p-out  { color: var(--muted); border-color: var(--border); background: var(--out-bg); }
+
+.sc-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; line-height: 1.3; }
+.sc-desc { font-size: 11px; color: var(--muted); line-height: 1.6; font-weight: 400; margin-bottom: 10px; }
+.sc-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.mc {
+  font-family: var(--mono); font-size: 9px; color: var(--muted);
+  background: rgba(0,0,0,0.03); border: 1px solid var(--border);
+  padding: 2px 7px; border-radius: 3px;
+}
+
+/* tool pills in cards */
+.tool-pill {
+  font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px; font-weight: 500; white-space: nowrap; border: 1px solid;
+}
+.tp-krkn { background: #E6F1FB; color: #185FA5; border-color: #B5D4F4; }
+.tp-k6   { background: #EAF3DE; color: #3B6D11; border-color: #97C459; }
+.tp-opik { background: #EEEDFE; color: #534AB7; border-color: #AFA9EC; }
+.tp-py   { background: #FAEEDA; color: #854F0B; border-color: #FAC775; }
+.tp-litmus { background: #FBEAF0; color: #993556; border-color: #ED93B1; }
+.tp-kubectl { background: #f0f0f0; color: #444; border-color: #ccc; }
+
+/* ── MODAL OVERLAY ── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  z-index: 998;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-overlay.open { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── DETAIL PANEL (MODAL) ── */
+.detail-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
+  z-index: 999;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.detail-panel.open {
+  display: flex;
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.dp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.dp-title { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.3; flex: 1; }
+.dp-close {
+  font-family: var(--mono); font-size: 18px; color: var(--muted);
+  cursor: pointer; padding: 0; border: none; background: transparent;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.dp-close:hover { border-color: var(--border2); color: var(--text); background: var(--surface); }
+
+.dp-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.dp-block { background: var(--surface2); border-radius: 6px; padding: 12px 14px; }
+.dp-block-lbl { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 5px; font-weight: 600; }
+.dp-block-val { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.5; word-break: break-word; }
+
+.dp-tools-lbl { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 6px; font-weight: 600; }
+.dp-tools-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
+.dp-how {
+  font-size: 11px; color: var(--muted); line-height: 1.7;
+  border-top: 1px solid var(--border); padding-top: 14px;
+  font-family: var(--mono);
+}
+.dp-how strong { color: var(--text); display: block; margin-bottom: 8px; font-size: 9px; letter-spacing: 0.08em; font-family: var(--mono); }
+
+/* ── TERMINAL ── */
+.terminal {
+  background: #f5f5f5; border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px 24px; margin-bottom: 52px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.9; overflow-x: auto;
+}
+.term-bar { display: flex; gap: 6px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.td { width: 10px; height: 10px; border-radius: 50%; }
+.td:nth-child(1){background:#E24B4A} .td:nth-child(2){background:#EF9F27} .td:nth-child(3){background:#1D9E75}
+.t-c{color:var(--text)} .t-i{color:var(--todo)} .t-ok{color:var(--done)} .t-w{color:var(--wip)} .t-m{color:var(--muted)} .t-e{color:var(--danger)}
+
+/* ── NEXT STEPS ── */
+.next-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 64px; }
+.next-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.next-card.p1 { border-top: 2px solid var(--done); }
+.next-card.p2 { border-top: 2px solid var(--wip); }
+.next-card.p3 { border-top: 2px solid var(--todo); }
+.next-pri { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 8px; }
+.next-t { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.next-d { font-size: 11px; color: var(--muted); line-height: 1.65; }
+.effort { display: flex; align-items: center; gap: 5px; margin-top: 10px; font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.ebar { display: flex; gap: 2px; }
+.ed { width: 12px; height: 3px; border-radius: 2px; background: rgba(0,0,0,0.07); }
+.ed.on { background: var(--todo); }
+
+footer {
+  border-top: 1px solid var(--border); padding: 26px 0;
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+}
+
+@media (max-width: 680px) {
+  .phases { grid-template-columns: 1fr; }
+  .phase-divider { height: 1px; }
+  .scope-box { grid-template-columns: 1fr; }
+  .scope-divider { height: 1px; }
+  .scope-col { padding: 20px 0; }
+  .wrap { padding: 0 16px; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .detail-panel { width: 95%; max-width: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <div class="hdr-row">
+    <div>
+      <div class="badge"><span class="badge-dot"></span>PHASE 2 — CHAOS INJECTION · EN COURS</div>
+      <h1>Resilience Agent<br><em>for LLM on K8s</em></h1>
+      <p class="subtitle">Agent autonome de chaos engineering — évaluation de la robustesse du service d'inférence IA sur Kubernetes. Stack : FastAPI · AnythingLLM · Milvus · vLLM · GPU.</p>
+    </div>
+    <div class="scope-stats">
+      <div class="scope-stat"><span class="scope-label">FAIT / OPÉRATIONNEL</span><span class="scope-val sv-done" id="cnt-done">—</span></div>
+      <div class="scope-stat"><span class="scope-label">EN COURS / À DÉCIDER</span><span class="scope-val sv-wip"  id="cnt-wip">—</span></div>
+      <div class="scope-stat"><span class="scope-label">À IMPLÉMENTER</span><span class="scope-val sv-todo" id="cnt-todo">—</span></div>
+      <div class="scope-stat"><span class="scope-label">HORS SCOPE</span><span class="scope-val sv-out"  id="cnt-out">—</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ PHASES ═══ -->
+<div class="section-title">Avancement du projet</div>
+<div class="phases">
+  <div class="phase">
+    <div class="phase-n">PHASE 01</div>
+    <div class="phase-t">Orchestration & monitoring</div>
+    <div class="phase-d">Stack RAG complète déployée sur K8s. Observabilité Prometheus, DCGM, Grafana, Opik.</div>
+    <span class="phase-s ps-done">✓ TERMINÉE</span>
+  </div>
+  <div class="phase-divider"></div>
+  <div class="phase">
+    <div class="phase-n">PHASE 02</div>
+    <div class="phase-t">Chaos injection</div>
+    <div class="phase-d">Infra K8s couverte par krkn-ai. Couche IA (vLLM, RAG, GPU) en cours de design.</div>
+    <span class="phase-s ps-wip">→ EN COURS</span>
+  </div>
+  <div class="phase-divider"></div>
+  <div class="phase">
+    <div class="phase-n">PHASE 03</div>
+    <div class="phase-t">FinOps GPU</div>
+    <div class="phase-d">Optimisation de l'allocation GPU selon les résultats de résilience obtenus en Phase 2.</div>
+    <span class="phase-s ps-next">○ À VENIR</span>
+  </div>
+</div>
+
+<!-- ═══ STACK ═══ -->
+<div class="section-title">Stack déployée — namespace churn-rag</div>
+<div class="stack-row">
+  <div class="stack-chip"><span class="chip-lbl">Backend</span><span class="chip-val">rag-api</span><span class="chip-tag">FastAPI · Running</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Frontend</span><span class="chip-val">AnythingLLM</span><span class="chip-tag">Running</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Inférence</span><span class="chip-val">vLLM</span><span class="chip-tag">2/2 · GPU</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Vector DB</span><span class="chip-val">Milvus</span><span class="chip-tag">etcd + MinIO</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Monitoring</span><span class="chip-val">DCGM + Prom.</span><span class="chip-tag">Grafana · Opik</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Chaos</span><span class="chip-val">krkn-ai</span><span class="chip-tag wip">En évaluation</span></div>
+  <div class="stack-chip"><span class="chip-lbl">Load test</span><span class="chip-val">k6</span><span class="chip-tag">Opérationnel</span></div>
+</div>
+
+<!-- ═══ AGENT FLOW ═══ -->
+<div class="section-title">Workflow de l'agent</div>
+<div class="agent-flow">
+  <div class="flow-row">
+    <div class="flow-step"><div class="flow-n">STEP 1</div><div class="flow-l">list_available_scenarios</div><div class="flow-s">Découverte YAML</div></div>
+    <div class="flow-arrow">›</div>
+    <div class="flow-step"><div class="flow-n">STEP 2</div><div class="flow-l">get_cluster_state</div><div class="flow-s">kubectl snapshot</div></div>
+    <div class="flow-arrow">›</div>
+    <div class="flow-step"><div class="flow-n">STEP 3</div><div class="flow-l">run_chaos_scenario</div><div class="flow-s">Injection → payload.json</div></div>
+    <div class="flow-arrow">›</div>
+    <div class="flow-step"><div class="flow-n">STEP 4</div><div class="flow-l">run_opik_evaluation</div><div class="flow-s">Hallucination · Faithfulness</div></div>
+    <div class="flow-arrow">›</div>
+    <div class="flow-step"><div class="flow-n">STEP 5</div><div class="flow-l">read_chaos_results</div><div class="flow-s">Health score · k6 · Opik</div></div>
+    <div class="flow-arrow">›</div>
+    <div class="flow-step"><div class="flow-n">STEP 6</div><div class="flow-l">write_final_report</div><div class="flow-s">Rapport Markdown</div></div>
+  </div>
+</div>
+
+<!-- ═══ PROGRESS ═══ -->
+<div class="section-title">Couverture des scénarios</div>
+<div class="progress-block">
+  <div class="prog-row">
+    <div class="prog-hdr"><span class="prog-lbl">Infrastructure K8s</span><span class="prog-pct" id="prog-infra-lbl">9 / 9 — krkn-ai opérationnel</span></div>
+    <div class="bar-track"><div class="bar-fill bf-done" style="width:100%"></div></div>
+  </div>
+  <div class="prog-row">
+    <div class="prog-hdr"><span class="prog-lbl">Couche inférence — vLLM + GPU</span><span class="prog-pct">2 / 7 — en cours</span></div>
+    <div class="bar-track"><div class="bar-fill bf-wip" style="width:28%"></div></div>
+  </div>
+  <div class="prog-row" style="margin-bottom:0">
+    <div class="prog-hdr"><span class="prog-lbl">Couche RAG — Milvus + FastAPI + guardrails</span><span class="prog-pct">0 / 10 — à implémenter</span></div>
+    <div class="bar-track"><div class="bar-fill bf-todo" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- ═══ SCOPE ═══ -->
+<div class="section-title">Périmètre du projet</div>
+<div class="scope-box">
+  <div class="scope-col">
+    <div class="scope-col-title in">✓ IN-SCOPE — injectable dans votre stack</div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Chaos infra K8s (pods, réseau, CPU/mem/IO, PVC)</div><div class="why">krkn-ai · déjà fait</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Saturation KV-cache vLLM, timeout génération</div><div class="why">script Python concurrent · k6</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>GPU/VRAM pressure (OOM simulation)</div><div class="why">kubectl patch · DCGM Diagnostics</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Token overflow near max_model_len</div><div class="why">script Python · validation HTTP codes</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Latence réseau vLLM ↔ FastAPI ↔ Milvus</div><div class="why">ChaosMesh NetworkChaos · tc netem</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Coupure Milvus (NetworkPolicy bloquante)</div><div class="why">kubectl · fallback context vide</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Noisy chunks injection dans Milvus</div><div class="why">pymilvus · mesure qualité via Opik</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Réponses malformées de vLLM vers FastAPI</div><div class="why">mock endpoint · parsing validation</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Adversarial prompts / guardrails test</div><div class="why">bibliothèque jailbreak · refusal rate</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Chaos pendant pic de charge (k6 + chaos)</div><div class="why">k6 load + krkn simultanés · scénario demo</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Documents multilingues dans RAG (arabe/fr)</div><div class="why">pipeline FastAPI · embedding robustness</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Truncation max_tokens côté vLLM</div><div class="why">FastAPI parsing · comportement FinOps</div></div></div>
+    <div class="scope-item"><div class="dot dot-in"></div><div><div>Évaluation qualité post-chaos via Opik</div><div class="why">hallucination_rate · faithfulness · context_relevancy</div></div></div>
+  </div>
+  <div class="scope-divider"></div>
+  <div class="scope-col">
+    <div class="scope-col-title out">○ HORS-SCOPE — pas dans votre stack actuelle</div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Agent Protocol & Communication Failures (#07)</div><div class="why">Pas de multi-agents dans votre architecture</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Feedback loop & retraining disruptions (#11)</div><div class="why">Pas de pipeline ML continu / fine-tuning</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Compliance & Regulatory Chaos (#18)</div><div class="why">Hors périmètre stage technique</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Human-in-the-loop simulation (#19, #29)</div><div class="why">Pas de circuit validation humaine dans votre stack</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Mid-prompt user feedback injection (#21)</div><div class="why">Pas d'interface de feedback temps-réel</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Bias, Fairness & Ethical Faults (#22)</div><div class="why">Nécessite framework d'évaluation dédié</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Chained prompts malicieux (#26)</div><div class="why">Pas de pipeline multi-agents à chaîner</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Malicious feedback to learning loops (#40)</div><div class="why">Pas de boucle d'apprentissage en ligne</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Context & Memory State Loss (#08 partiel)</div><div class="why">AnythingLLM stateless dans votre config</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Corrupt dynamic prompt template (#27)</div><div class="why">Templates statiques dans votre RAG</div></div></div>
+    <div class="scope-item"><div class="dot dot-out"></div><div><div>Cloud Provider outage (#17)</div><div class="why">Infra on-premise K8s, pas de dépendance cloud</div></div></div>
+  </div>
+</div>
+
+<!-- ═══ CATALOGUE INTERACTIF ═══ -->
+<div class="section-title">Catalogue des scénarios — cliquez pour le détail</div>
+
+<div class="filter-row">
+  <button class="filter-btn active"        onclick="filter('all',  this)">Tous</button>
+  <button class="filter-btn fa-done"       onclick="filter('done', this)">✓ Fait</button>
+  <button class="filter-btn fa-wip"        onclick="filter('wip',  this)">⟳ En cours</button>
+  <button class="filter-btn"              onclick="filter('todo', this)">→ À faire</button>
+  <button class="filter-btn fa-out"        onclick="filter('out',  this)">○ Hors scope</button>
+  <button class="filter-btn fa-krkn"       onclick="filter('krkn', this)">krkn</button>
+  <button class="filter-btn fa-k6"         onclick="filter('k6',   this)">k6</button>
+  <button class="filter-btn fa-opik"       onclick="filter('opik', this)">opik</button>
+</div>
+
+<!-- CARDS GRID -->
+<div id="cards-section"></div>
+
+<!-- MODAL OVERLAY -->
+<div id="modal-overlay" class="modal-overlay" onclick="closeDetail()"></div>
+
+<!-- DETAIL PANEL (MODAL) -->
+<div id="detail-panel" class="detail-panel">
+  <div class="dp-header">
+    <div class="dp-title" id="dp-title"></div>
+    <button class="dp-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div class="dp-grid">
+    <div class="dp-block">
+      <div class="dp-block-lbl">STATUT</div>
+      <div class="dp-block-val" id="dp-status"></div>
+    </div>
+    <div class="dp-block">
+      <div class="dp-block-lbl">MÉTRIQUES CLÉS</div>
+      <div class="dp-block-val" id="dp-metrics"></div>
+    </div>
+  </div>
+  <div class="dp-tools-lbl">OUTILS</div>
+  <div class="dp-tools-row" id="dp-tools-row"></div>
+  <div class="dp-how"><strong>COMMENT IMPLÉMENTER</strong><span id="dp-how"></span></div>
+</div>
+
+<!-- ═══ TERMINAL ═══ -->
+<div class="section-title" style="margin-top:52px">Agent — exemple de run</div>
+<div class="terminal">
+  <div class="term-bar"><div class="td"></div><div class="td"></div><div class="td"></div></div>
+  <div><span class="t-m">$</span> <span class="t-c">python agent2/main.py --group ai-layer --report rapport_ai.md</span></div>
+  <div><span class="t-i">&nbsp; Session créée : chaos_exports/session_20250513_143022</span></div>
+  <div><span class="t-m">&nbsp; Rapport cible  : .../session_20250513_143022/rapport_ai.md</span></div>
+  <div>&nbsp;</div>
+  <div><span class="t-m">&nbsp; [list_available_scenarios] → 12 scénarios, results/ai-layer/</span></div>
+  <div><span class="t-m">&nbsp; [get_cluster_state]        → vLLM 2/2, Milvus 1/1, rag-api 1/1</span></div>
+  <div>&nbsp;</div>
+  <div><span class="t-m">&nbsp; [run_chaos_scenario] vllm_kvcache_saturation.yaml</span></div>
+  <div><span class="t-w">&nbsp; 🔥 vLLM KV-cache saturation — 40 VUs, prompts 4000+ tokens</span></div>
+  <div><span class="t-ok">&nbsp; → health_score: 72 | error_rate: 0.35 | p95: 8.4s</span></div>
+  <div><span class="t-m">&nbsp; [run_opik_evaluation] → 38 traces analysées</span></div>
+  <div><span class="t-ok">&nbsp; → hallucination_rate: 0.08 | faithfulness: 0.71 | relevancy: 0.82</span></div>
+  <div><span class="t-w">&nbsp; ⚠ health_score &lt; 90 — recommandation : augmenter max_num_seqs</span></div>
+  <div>&nbsp;</div>
+  <div><span class="t-m">&nbsp; [run_chaos_scenario] milvus_network_policy.yaml</span></div>
+  <div><span class="t-w">&nbsp; 🔥 Vector DB connection loss — NetworkPolicy 45s</span></div>
+  <div><span class="t-ok">&nbsp; → health_score: 95 | pods_unrecovered: 0 | fallback: actif</span></div>
+  <div><span class="t-m">&nbsp; [run_opik_evaluation] → context_relevancy: 0.00 (Milvus down = attendu)</span></div>
+  <div>&nbsp;</div>
+  <div><span class="t-m">&nbsp; [run_chaos_scenario] rag_noisy_chunks.yaml</span></div>
+  <div><span class="t-w">&nbsp; 🔥 Noisy chunks injection — 50 chunks corrompus dans Milvus</span></div>
+  <div><span class="t-ok">&nbsp; → Opik relevance_drop: -34% | hallucination_rate: 0.28</span></div>
+  <div><span class="t-w">&nbsp; ⚠ qualité RAG dégradée — recommandation : filtrage score &gt; 0.75</span></div>
+  <div>&nbsp;</div>
+  <div><span class="t-ok">&nbsp; [write_final_report] → rapport_ai.md (6 244 bytes)</span></div>
+</div>
+
+<!-- ═══ NEXT STEPS ═══ -->
+<div class="section-title">Plan d'implémentation</div>
+<div class="next-grid">
+  <div class="next-card p1">
+    <div class="next-pri">PRIORITÉ 1 — IMMÉDIAT</div>
+    <div class="next-t">vLLM load injection</div>
+    <div class="next-d">tools/run_k6_load.py — run_load_injection(). Lancer k6 + krkn en parallèle sur vLLM.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed"></div><div class="ed"></div></div><span>Faible</span></div>
+  </div>
+  <div class="next-card p1">
+    <div class="next-pri">PRIORITÉ 1 — IMMÉDIAT</div>
+    <div class="next-t">Milvus NetworkPolicy chaos</div>
+    <div class="next-d">YAML NetworkPolicy + intégration dans results/ai-layer/. Test fallback rag-api.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed"></div><div class="ed"></div></div><span>Faible</span></div>
+  </div>
+  <div class="next-card p1">
+    <div class="next-pri">PRIORITÉ 1 — IMMÉDIAT</div>
+    <div class="next-t">Token overflow test</div>
+    <div class="next-d">Script Python 95% max_model_len. Validation codes HTTP 400 vs 500.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed"></div><div class="ed"></div></div><span>Faible</span></div>
+  </div>
+  <div class="next-card p2">
+    <div class="next-pri">PRIORITÉ 2 — CETTE SEMAINE</div>
+    <div class="next-t">Noisy chunks + Opik scoring</div>
+    <div class="next-d">pymilvus insert + run_opik_evaluation() automatisé dans l'agent après chaque chaos.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed on"></div><div class="ed"></div></div><span>Moyen</span></div>
+  </div>
+  <div class="next-card p2">
+    <div class="next-pri">PRIORITÉ 2 — CETTE SEMAINE</div>
+    <div class="next-t">ChaosMesh NetworkChaos</div>
+    <div class="next-d">Décider ChaosMesh vs Litmus vs krkn-ai pour scénarios réseau inter-services.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed on"></div><div class="ed"></div></div><span>Moyen</span></div>
+  </div>
+  <div class="next-card p2">
+    <div class="next-pri">PRIORITÉ 2 — CETTE SEMAINE</div>
+    <div class="next-t">GPU pressure + DCGM Diag</div>
+    <div class="next-d">kubectl patch + DCGM Diagnostics. Vérifier RBAC cluster avant.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed on"></div><div class="ed"></div></div><span>Moyen</span></div>
+  </div>
+  <div class="next-card p3">
+    <div class="next-pri">PRIORITÉ 3 — PHASE 3 / FINOPS</div>
+    <div class="next-t">Blue/green + truncation FinOps</div>
+    <div class="next-d">Chaos pendant rollout + lien max_tokens / coût GPU pour Phase 3.</div>
+    <div class="effort"><span>Effort</span><div class="ebar"><div class="ed on"></div><div class="ed on"></div><div class="ed on"></div></div><span>Élevé</span></div>
+  </div>
+</div>
+
+<footer>
+  <span>Chaos Resilience Agent — Chiraz · Stage GPU/LLM</span>
+  <span>Phase 2 · Mai 2025</span>
+</footer>
+
+</div><!-- /wrap -->
+
+<script>
+const SCENARIOS = [
+  /* ─── PHASE 1 — INFRA (DONE) ─── */
+  {id:"I01",num:"pod-scenarios",status:"done",group:"infra",
+   name:"Pod & container failures",
+   desc:"Kill pod vLLM, validation PDB, temps de récupération automatique mesuré.",
+   tools:["krkn"],
+   metrics:"pods_unrecovered, restart_count, health_score",
+   how:"krkn pod-scenarios + container-scenarios sur churn-rag. Intégré dans l'agent (list → run → read_results). PDB validé."},
+  {id:"I02",num:"network-scenarios · dns-outage",status:"done",group:"infra",
+   name:"Réseau & DNS",
+   desc:"Latence réseau, perte de paquets, coupure DNS sur namespace churn-rag.",
+   tools:["krkn"],
+   metrics:"network_latency_ms, packet_loss_rate, dns_errors",
+   how:"krkn network-scenarios (tc netem) + dns-outage (CoreDNS). Déjà réalisé."},
+  {id:"I03",num:"node-cpu/memory/io-hog",status:"done",group:"infra",
+   name:"Saturation ressources nœud GPU",
+   desc:"CPU hog, memory hog, I/O hog sur le nœud physique hébergeant vLLM.",
+   tools:["krkn"],
+   metrics:"node_cpu_pct, node_mem_pct, io_wait_pct, oom_kills",
+   how:"krkn node-cpu-hog / node-memory-hog / node-io-hog avec stress-ng. Mesuré via DCGM + Prometheus."},
+  {id:"I04",num:"pvc-scenarios · application-outages",status:"done",group:"infra",
+   name:"Stockage & indisponibilité applicative",
+   desc:"Perte PVC Milvus/MinIO, rag-api down, validation retry client.",
+   tools:["krkn"],
+   metrics:"pvc_bound, milvus_recovery_s, http_error_rate",
+   how:"krkn pvc-scenarios sur Milvus + MinIO PVC. krkn application-outages sur rag-api. Déjà réalisé."},
+  {id:"I05",num:"#05 · #34",status:"done",group:"infra",
+   name:"Load testing & peak usage",
+   desc:"Saturation rag-api avec k6, métriques latence collectées via Prometheus sous charge.",
+   tools:["k6"],
+   metrics:"p95_latency, throughput, http_req_failed",
+   how:"k6 run avec stages warm-up → pic 50 VUs → descente. Résultats dans k6_summary.json. Déjà opérationnel."},
+  {id:"I06",num:"#09",status:"done",group:"infra",
+   name:"Observabilité & monitoring",
+   desc:"Prometheus + DCGM exporter + Grafana + Opik (traces LLM, évaluations) configurés.",
+   tools:["krkn"],
+   metrics:"scrape_ok, dcgm_gpu_memory_used, opik_traces",
+   how:"krkn pod-scenarios sur dcgm-exporter. Vérifie que l'observabilité tient sous chaos. Déjà réalisé."},
+
+  /* ─── PHASE 2 — AI LAYER (WIP) ─── */
+  {id:"A01",num:"#42",status:"wip",group:"ai",
+   name:"Timeout vLLM sous charge",
+   desc:"Throttle latence + charge k6 simultanée — mesure TTFT et tokens/s.",
+   tools:["krkn","k6"],
+   metrics:"p95_latency, http_req_failed, health_score, TTFT",
+   how:"1. Lancer k6 (40 VUs, stage pic 10min)\n2. En parallèle : krkn network-scenarios sur vllm (latency inject 5s via tc netem)\n3. Après run : lire k6_summary.json + payload.json + opik_evaluation.json\n4. Seuil critique : p95 > 18s OU error_rate > 8%"},
+  {id:"A02",num:"#05 (GPU)",status:"wip",group:"ai",
+   name:"KV-cache saturation",
+   desc:"Prompts longs pour saturer la mémoire GPU — OOM vLLM possible.",
+   tools:["k6","krkn"],
+   metrics:"gpu_mem_pct, kvcache_hit_rate, oom_kills",
+   how:"1. k6 avec buildHeavyPrompt() — prompts 4000+ tokens\n2. krkn node-memory-hog en parallèle (pressure GPU)\n3. Mesurer via DCGM : dcgm_gpu_memory_used\n4. Seuil : gpu_mem > 90% OU OOM kill détecté"},
+  {id:"A03",num:"#54",status:"wip",group:"ai",
+   name:"Token overflow near max_model_len",
+   desc:"Dépasser max_model_len, valider truncation propre (HTTP 400 jamais 500).",
+   tools:["k6"],
+   metrics:"truncation_rate, answer_length, http_status",
+   how:"1. k6 : envoyer prompts de 8000+ tokens OU max_tokens=10\n2. Vérifier que la réponse est tronquée proprement (pas de 500)\n3. Check : r.json('answer').length > 0 ET r.status === 200\n4. Opik : faithfulness score sur réponse tronquée"},
+  {id:"A04",num:"#16",status:"wip",group:"ai",
+   name:"GPU unavailability",
+   desc:"Simuler panne GPU mid-inférence — kubectl patch + DCGM Diagnostics.",
+   tools:["krkn","k6"],
+   metrics:"inference_failures, fallback_triggered, recovery_s",
+   how:"1. krkn pod-scenarios sur vllm (kill pod 2/2 containers)\n2. k6 en parallèle pour mesurer combien de requêtes échouent\n3. Observer si le Deployment K8s relance le pod (readiness probe)\n4. Seuil : recovery < 60s ET error_rate < 20% pendant kill"},
+  {id:"A05",num:"#48",status:"wip",group:"ai",
+   name:"Vector DB disruption",
+   desc:"Coupure Milvus pendant requête RAG — fallback contexte vide attendu.",
+   tools:["krkn"],
+   metrics:"retrieval_failures, fallback_no_context, health_score",
+   how:"1. krkn pvc-scenarios ou pod-scenarios sur milvus-0\n2. Pendant le chaos : k6 envoie des requêtes RAG normales\n3. Vérifier : 500 ? réponse sans contexte ? timeout ?\n4. Opik : context_relevancy = 0 si Milvus down = scénario réussi"},
+
+  /* ─── PHASE 2 — AI LAYER (TODO) ─── */
+  {id:"B01",num:"#49",status:"todo",group:"ai",
+   name:"Noisy chunks injection",
+   desc:"Injecter chunks corrompus dans Milvus, mesurer dérive qualité via Opik.",
+   tools:["py","opik"],
+   metrics:"retrieval_noise_rate, opik_relevance, faithfulness",
+   how:"Script Python pymilvus : insérer 20% de chunks aléatoires dans la collection. Lancer k6 charge normale. Mesurer avec Opik : context_relevancy et faithfulness doivent baisser significativement."},
+  {id:"B02",num:"#46",status:"todo",group:"ai",
+   name:"Drop context chunks",
+   desc:"Middleware FastAPI qui drop les résultats de retrieval avant le LLM.",
+   tools:["py","k6","opik"],
+   metrics:"answer_without_context_rate, hallucination_rate",
+   how:"Middleware FastAPI qui drop aléatoirement top_k results (50% du temps). Mesurer avec Opik : hallucination_rate doit monter. K6 mesure le taux de réponses vides."},
+  {id:"B03",num:"#33",status:"todo",group:"ai",
+   name:"Réponses malformées de vLLM",
+   desc:"Injecter JSON invalide depuis un mock vLLM, tester robustesse parsing FastAPI.",
+   tools:["py"],
+   metrics:"parsing_errors, http_500_rate, crash_rate",
+   how:"Mock endpoint Python qui renvoie des JSON cassés à la place de vLLM. Vérifier que FastAPI retourne 422 proprement et ne crashe pas."},
+  {id:"B04",num:"#38",status:"todo",group:"ai",
+   name:"Switch model version mid-session",
+   desc:"Rollout nouvelle révision vLLM pendant requêtes actives, comportement in-flight.",
+   tools:["krkn"],
+   metrics:"in_flight_errors, rollout_duration, answer_consistency",
+   how:"kubectl rollout restart sur vllm deployment pendant k6 actif. Observer combien de requêtes in-flight échouent. Seuil : < 5% de perte pendant rolling update."},
+
+  /* ─── PHASE 2 — GUARDRAILS (TODO) ─── */
+  {id:"G01",num:"#41",status:"todo",group:"guardrail",
+   name:"Adversarial prompts & guardrails",
+   desc:"Corpus jailbreak variés — taux de refus cible : 100%.",
+   tools:["k6","opik"],
+   metrics:"injection_blocked_rate, false_positive_rate, guardrail_latency",
+   how:"Corpus k6 avec 50 prompts jailbreak variés (ignore instructions, roleplay DAN, SQL injection...). Check : réponse ne contient pas de données système. Mesurer taux de blocage ET faux positifs."},
+  {id:"G02",num:"#43",status:"todo",group:"guardrail",
+   name:"Hallucination triggers",
+   desc:"Questions hors-corpus pour forcer le LLM à halluciner — mesure Opik.",
+   tools:["k6","opik"],
+   metrics:"opik_hallucination_rate, answer_groundedness, faithfulness",
+   how:"1. k6 : questions totalement hors corpus churn (météo, géo, etc.)\n2. Opik : mesurer groundedness — doit être proche de 0 sur hors-corpus\n3. Vérifier que le RAG répond 'je ne sais pas' ou refuse proprement\n4. Seuil alerte : hallucination_rate > 30%"},
+  {id:"G03",num:"#14",status:"todo",group:"guardrail",
+   name:"Injection de contexte biaisé",
+   desc:"Corrompre le contexte RAG injecté, observer dérive sémantique via Opik.",
+   tools:["py","opik"],
+   metrics:"semantic_drift, opik_relevance, faithfulness_delta",
+   how:"Middleware rag-api : remplacer le contexte récupéré par du contenu trompeur 50% du temps. Opik mesure la dérive de faithfulness avant/après injection."},
+
+  /* ─── PHASE 2 — ROBUSTESSE API (TODO) ─── */
+  {id:"R01",num:"#50",status:"todo",group:"api",
+   name:"Malformed inputs",
+   desc:"JSON invalide, champs manquants, types erronés — jamais de 500.",
+   tools:["k6"],
+   metrics:"validation_error_rate, http_4xx_rate, crash_rate",
+   how:"k6 : envoyer payloads sans le champ 'question', types wrong (question:123), JSON cassé. Vérifier : 422 Unprocessable ou 400 Bad Request, jamais 500. Mesurer si FastAPI crashe sous ces payloads."},
+  {id:"R02",num:"#53",status:"todo",group:"api",
+   name:"Documents multilingues dans RAG",
+   desc:"Robustesse pipeline RAG avec données arabe et français — embedding cross-lingual.",
+   tools:["k6","opik"],
+   metrics:"cross_lingual_relevancy, embedding_score, answer_quality",
+   how:"Injecter dans Milvus des chunks en arabe et français. Tester des questions dans les deux langues via k6. Mesurer via Opik : context_relevancy cross-lingual."},
+
+  /* ─── PHASE 2 — COMBO DEMO ─── */
+  {id:"D01",num:"#20 + #34",status:"todo",group:"combo",
+   name:"Kill vLLM sous pic de charge — DEMO",
+   desc:"Scénario star du demo : k6 60 VUs + kill pod vLLM + recovery time.",
+   tools:["krkn","k6","opik"],
+   metrics:"combined_health_score, sla_breaches, recovery_s, hallucination_rate",
+   how:"1. k6 monte à 60 VUs (pic) — laisser tourner 5min\n2. krkn kill pod vllm pendant le pic\n3. Mesurer : combien de requêtes échouent, recovery time K8s\n4. Opik : hallucination_rate pendant la dégradation\n5. Seuil SLA : recovery < 60s, error_rate < 20% pendant kill\nC'est le scénario le plus impactant pour le demo."},
+
+  /* ─── HORS SCOPE ─── */
+  {id:"O01",num:"#07",status:"out",group:"oos",
+   name:"Agent Protocol & Communication Failures",
+   desc:"Pas de multi-agents dans l'architecture actuelle.",
+   tools:[],metrics:"-",
+   how:"Hors scope : pas de pipeline multi-agents dans le stack K8s actuel."},
+  {id:"O02",num:"#11",status:"out",group:"oos",
+   name:"Feedback Loop & Retraining Disruptions",
+   desc:"Pas de pipeline de fine-tuning ou d'apprentissage continu.",
+   tools:[],metrics:"-",
+   how:"Hors scope : pas de pipeline MLOps / réentraînement dans le stack actuel."},
+  {id:"O03",num:"#18",status:"out",group:"oos",
+   name:"Compliance & Regulatory Chaos",
+   desc:"Hors périmètre technique du stage.",
+   tools:[],metrics:"-",
+   how:"Hors périmètre stage technique."},
+  {id:"O04",num:"#19 · #21 · #29",status:"out",group:"oos",
+   name:"Human-in-the-loop & feedback injection",
+   desc:"Pas de circuit de validation humaine ni de feedback temps-réel dans le stack.",
+   tools:[],metrics:"-",
+   how:"Hors scope : pas d'interface de validation humaine dans le stack."},
+  {id:"O05",num:"#22 · #26 · #27",status:"out",group:"oos",
+   name:"Bias, chained prompts & prompt corruption",
+   desc:"Nécessite framework éthique ou multi-agents non présent.",
+   tools:[],metrics:"-",
+   how:"Hors scope : nécessite un framework d'évaluation d'équité (ex: Fairlearn) non déployé."},
+  {id:"O06",num:"#40 · #47",status:"out",group:"oos",
+   name:"Malicious feedback & misleading RAG content",
+   desc:"Pas de boucle d'apprentissage en ligne. Hors objectif résilience.",
+   tools:[],metrics:"-",
+   how:"Hors scope : pas de boucle d'apprentissage en ligne."},
+];
+
+const SECTIONS = [
+  {key:"infra",    label:"Phase 1 — Scénarios infra (réalisés) ✓"},
+  {key:"ai",       label:"Phase 2 — Couche AI : vLLM, GPU, vector DB"},
+  {key:"guardrail",label:"Phase 2 — Guardrails & adversarial"},
+  {key:"api",      label:"Phase 2 — Robustesse API"},
+  {key:"combo",    label:"Phase 2 — Scénario combiné (demo)"},
+  {key:"oos",      label:"Hors scope"},
+];
+
+const TOOL_CLASSES = {krkn:"tp-krkn",k6:"tp-k6",opik:"tp-opik",py:"tp-py",litmus:"tp-litmus",kubectl:"tp-kubectl"};
+const TOOL_LABELS  = {krkn:"krkn-ai",k6:"k6",opik:"opik",py:"python",litmus:"litmus",kubectl:"kubectl"};
+const STATUS_LABELS = {done:"✓ Réalisé",wip:"⟳ En cours",todo:"→ À planifier",out:"○ Hors scope"};
+const PILL_CLASSES = {done:"p-done",wip:"p-wip",todo:"p-todo",out:"p-out"};
+const PILL_LABELS  = {done:"✓ Fait",wip:"⟳ En cours",todo:"→ À faire",out:"○ Hors scope"};
+
+let activeFilter = "all";
+let activeCard = null;
+
+function toolChip(t) {
+  const cls = TOOL_CLASSES[t] || "tp-kubectl";
+  const lbl = TOOL_LABELS[t] || t;
+  return `<span class="tool-pill ${cls}">${lbl}</span>`;
+}
+
+function statusPill(s) {
+  return `<span class="pill ${PILL_CLASSES[s]||'p-out'}">${PILL_LABELS[s]||s}</span>`;
+}
+
+function visible(sc) {
+  if (activeFilter === "all")  return true;
+  if (activeFilter === "done") return sc.status === "done";
+  if (activeFilter === "wip")  return sc.status === "wip";
+  if (activeFilter === "todo") return sc.status === "todo";
+  if (activeFilter === "out")  return sc.status === "out";
+  if (activeFilter === "krkn") return sc.tools.includes("krkn");
+  if (activeFilter === "k6")   return sc.tools.includes("k6");
+  if (activeFilter === "opik") return sc.tools.includes("opik");
+  return true;
+}
+
+function render() {
+  const section = document.getElementById("cards-section");
+  section.innerHTML = "";
+
+  SECTIONS.forEach(sec => {
+    const items = SCENARIOS.filter(s => s.group === sec.key && visible(s));
+    if (!items.length) return;
+
+    const phaseWrapper = document.createElement("div");
+    phaseWrapper.className = "phase-section";
+
+    const phaseTitle = document.createElement("div");
+    phaseTitle.className = "phase-section-title";
+    phaseTitle.textContent = sec.label;
+    phaseWrapper.appendChild(phaseTitle);
+
+    const grid = document.createElement("div");
+    grid.className = "cards-grid";
+
+    items.forEach(sc => {
+      const card = document.createElement("div");
+      card.className = `sc-card c-${sc.status}`;
+      card.dataset.id = sc.id;
+      card.onclick = (e) => {
+        e.stopPropagation();
+        selectCard(sc, card);
+      };
+      card.innerHTML = `
+        <div class="sc-top">
+          <span class="sc-num">${sc.num}</span>
+          ${statusPill(sc.status)}
+        </div>
+        <div class="sc-name">${sc.name}</div>
+        <div class="sc-desc">${sc.desc}</div>
+        <div class="sc-meta">${sc.tools.map(toolChip).join("")}</div>
+      `;
+      grid.appendChild(card);
+    });
+
+    phaseWrapper.appendChild(grid);
+    section.appendChild(phaseWrapper);
+  });
+
+  updateCounts();
+}
+
+function updateCounts() {
+  document.getElementById("cnt-done").textContent = SCENARIOS.filter(s => s.status === "done").length;
+  document.getElementById("cnt-wip").textContent  = SCENARIOS.filter(s => s.status === "wip").length;
+  document.getElementById("cnt-todo").textContent = SCENARIOS.filter(s => s.status === "todo").length;
+  document.getElementById("cnt-out").textContent  = SCENARIOS.filter(s => s.status === "out").length;
+}
+
+function filter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  closeDetail();
+  render();
+}
+
+function selectCard(sc, cardEl) {
+  // Remove active class from previous card
+  if (activeCard) activeCard.classList.remove("active");
+  
+  // Add active class to new card
+  cardEl.classList.add("active");
+  activeCard = cardEl;
+  
+  showDetail(sc);
+}
+
+function showDetail(sc) {
+  const panel = document.getElementById("detail-panel");
+  const overlay = document.getElementById("modal-overlay");
+  
+  document.getElementById("dp-title").textContent   = `${sc.num} — ${sc.name}`;
+  document.getElementById("dp-status").textContent  = STATUS_LABELS[sc.status] || sc.status;
+  document.getElementById("dp-metrics").textContent = sc.metrics;
+  document.getElementById("dp-tools-row").innerHTML = sc.tools.length ? sc.tools.map(toolChip).join("") : "<span style='font-size:12px;color:var(--muted)'>aucun outil externe</span>";
+  document.getElementById("dp-how").innerHTML       = sc.how.replace(/\n/g, "<br>");
+  
+  panel.classList.add("open");
+  overlay.classList.add("open");
+}
+
+function closeDetail() {
+  const panel = document.getElementById("detail-panel");
+  const overlay = document.getElementById("modal-overlay");
+  
+  panel.classList.remove("open");
+  overlay.classList.remove("open");
+  
+  if (activeCard) {
+    activeCard.classList.remove("active");
+    activeCard = null;
+  }
+}
+
+render();
+</script>
+</body>
+</html>
